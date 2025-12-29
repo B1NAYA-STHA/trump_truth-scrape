@@ -3,11 +3,12 @@ import * as cheerio from "cheerio";
 import fs from "fs";
 
 const BASE_URL = "https://www.trumpstruth.org";
-const OUTPUT_FILE = "output.json";
+const OUTPUT_FILE = "posts.json";
+const MAX_LIMIT = 100;                      //number of posts to scrape
 
 const impit = new Impit({
-  browser: "chrome",       
-  ignoreTlsErrors: true,  
+  browser: "chrome",
+  ignoreTlsErrors: true,
 });
 
 const results = [];
@@ -17,13 +18,15 @@ async function scrapePage(pageUrl, pageNum) {
   console.log(`URL: ${pageUrl}`);
 
   const res = await impit.fetch(pageUrl, {
-    headers: { "Accept": "text/html" }
+    headers: { "Accept": "text/html" },
   });
 
   const html = await res.text();
   const $ = cheerio.load(html);
 
   $("div.status[data-status-url]").each((_, el) => {
+    if (MAX_LIMIT && results.length >= MAX_LIMIT) return false; 
+
     const status = $(el);
 
     const contentText = status.find(".status__content").text().trim();
@@ -38,11 +41,18 @@ async function scrapePage(pageUrl, pageNum) {
 
     const link = status.attr("data-status-url") || null;
 
+    const images = [];
+    status.find("div.status-attachment--image img").each((_, img) => {
+      const src = $(img).attr("src");
+      if (src) images.push(src);
+    });
+
     results.push({
       content,
       date: dateText,
       originalPostLink,
       link,
+      images,
     });
   });
 
@@ -66,11 +76,16 @@ async function scrapePage(pageUrl, pageNum) {
 
       console.log(`Total statuses scraped: ${results.length}`);
 
+      if (MAX_LIMIT && results.length >= MAX_LIMIT) {
+        console.log(`Reached max limit of ${MAX_LIMIT}. Stopping.`);
+        break;
+      }
+
       pageNum++;
       // small delay to avoid rapid requests
       await new Promise((r) => setTimeout(r, 100));
     } catch (err) {
-      console.error(" Error:", err.message);
+      console.error("Error:", err.message);
       break;
     }
   }
