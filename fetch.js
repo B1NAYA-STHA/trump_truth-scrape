@@ -1,59 +1,79 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+import { Impit } from "impit";
+import * as cheerio from "cheerio";
+import fs from "fs";
 
-const BASE_URL = "https://trumpstruth.org/";
-const MAX_PAGES = 10;
+const BASE_URL = "https://www.trumpstruth.org";
+const OUTPUT_FILE = "output.json";
 
-let serial = 1;
+const impit = new Impit({
+  browser: "chrome",       
+  ignoreTlsErrors: true,  
+});
 
-async function scrapePage(url) {
-  try {
-    const response = await axios.get(url);
-    if (response.status !== 200) {
-      console.log(`Failed to load page: ${response.status}`);
-      return null;
-    }
+const results = [];
 
-    const $ = cheerio.load(response.data);
-    const statuses = $('div.status');
+async function scrapePage(pageUrl, pageNum) {
+  console.log(`\nScraping page ${pageNum}`);
+  console.log(`URL: ${pageUrl}`);
 
-    statuses.each((i, status) => {
-      const $status = $(status);
-      const statusUrl = $status.attr('data-status-url')?.trim();
-      if (!statusUrl) return;
+  const res = await impit.fetch(pageUrl, {
+    headers: { "Accept": "text/html" }
+  });
 
-      const profileName = $status.find('.status-info__account-name').text().trim();
-      const username = $status.find('.status-info__meta-item').first().text().trim();
-      const date = $status.find('.status-info__meta-item').last().text().trim();
-      const originalPostLink = $status.find('.status__external-link').attr('href');
-      const content = $status.find('.status__content').text().trim();
+  const html = await res.text();
+  const $ = cheerio.load(html);
 
-      console.log(`Status ${serial}:`);
-      console.log(`Data-status-url: ${statusUrl}`);
-      console.log(`Profile Name: ${profileName}`);
-      console.log(`Username: ${username}`);
-      console.log(`Date: ${date}`);
-      console.log(`Original Post Link: ${originalPostLink}`);
-      console.log(`Content: ${content}`);
-      console.log('-'.repeat(80));
-      serial++;
+  $("div.status[data-status-url]").each((_, el) => {
+    const status = $(el);
+
+    const contentText = status.find(".status__content").text().trim();
+    const content = contentText.length ? contentText : null;
+
+    const dateText =
+      status.find(".status-info__meta-item time").attr("datetime") ||
+      status.find(".status-info__meta-item").last().text().trim();
+
+    const originalPostLink =
+      status.find(".status__external-link").attr("href") || null;
+
+    const link = status.attr("data-status-url") || null;
+
+    results.push({
+      content,
+      date: dateText,
+      originalPostLink,
+      link,
     });
+  });
 
-    // Get next page URL
-    const nextPageLink = $('.pagination a:contains("Next Page")').attr('href');
-    return nextPageLink ? nextPageLink : null;
-
-  } catch (error) {
-    console.error(error);
-    return null;
-  }
+  const nextHref = $('.pagination a:contains("Next Page")').attr("href");
+  if (!nextHref) return null;
+  return nextHref.startsWith("http") ? nextHref : new URL(nextHref, BASE_URL).href;
 }
 
 (async () => {
   let pageUrl = BASE_URL;
-  for (let i = 0; i < MAX_PAGES; i++) {
-    if (!pageUrl) break;
-    console.log(`\nScraping page ${i + 1}...`);
-    pageUrl = await scrapePage(pageUrl);
+  let pageNum = 1;
+
+  while (pageUrl) {
+    try {
+      pageUrl = await scrapePage(pageUrl, pageNum);
+
+      fs.writeFileSync(
+        OUTPUT_FILE,
+        JSON.stringify({ data: results, total_count: results.length }, null, 2)
+      );
+
+      console.log(`Total statuses scraped: ${results.length}`);
+
+      pageNum++;
+      // small delay to avoid rapid requests
+      await new Promise((r) => setTimeout(r, 100));
+    } catch (err) {
+      console.error(" Error:", err.message);
+      break;
+    }
   }
+
+  console.log("\nScraping complete! Total statuses:", results.length);
 })();
