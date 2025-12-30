@@ -1,0 +1,10 @@
+  "https://truthsocial.com/api/v1/accounts/107780257626128497/statuses?exclude_replies=true&only_replies=false&with_muted=true";
+first api hit 
+
+
+  https://truthsocial.com/api/v1/accounts/107780257626128497/statuses?max_id=115782185742321465&page=1&exclude_replies=true&limit=20&exclude_replies=true&only_replies=false&with_muted=true
+  second api hit while scrolling
+
+  
+https://truthsocial.com/api/v1/accounts/107780257626128497/statuses?max_id=115786745967133949&page=1&exclude_replies=true&limit=20&exclude_replies=true&only_replies=false&with_muted=true
+third api hit
