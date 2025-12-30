@@ -22,7 +22,7 @@ async function withRetry(fn, maxRetries = 5) {
   while (retries <= maxRetries) {
     try {
       const result = await fn();
-      return result; 
+      return result;
     } catch (err) {
       if (err.statusCode !== 429) throw err;
 
@@ -36,7 +36,7 @@ async function withRetry(fn, maxRetries = 5) {
   }
 }
 
-//Fetch Function 
+// Fetch Function
 async function fetchStatuses(maxId) {
   const params = new URLSearchParams({
     exclude_replies: "true",
@@ -61,16 +61,6 @@ async function fetchStatuses(maxId) {
 // Scraper function
 async function* scrapeStatuses(startMaxId = null) {
   let maxId = startMaxId;
-  let page = 1;
-
-  // Resume support from JSON
-  if (fs.existsSync(OUTPUT_FILE)) {
-    const pages = JSON.parse(fs.readFileSync(OUTPUT_FILE, "utf-8"));
-    const lastPage = pages[pages.length - 1];
-    maxId = lastPage?.data?.[lastPage.data.length - 1]?.id || null;
-    page = lastPage ? lastPage.page + 1 : 1;
-    console.log(`Resuming from page ${page} (max_id=${maxId})`);
-  }
 
   while (true) {
     const data = await withRetry(() => fetchStatuses(maxId));
@@ -80,21 +70,21 @@ async function* scrapeStatuses(startMaxId = null) {
       return;
     }
 
-    yield { page, maxId, data };
+    yield { maxId, data };
 
     maxId = data[data.length - 1].id;
-    page++;
     await sleep(4000); // normal delay between pages
   }
 }
 
-// JSON Storage Function
-async function saveToJson(pageData) {
+// JSON file storage
+function saveToJson(pageData, pageNumber) {
   const pages = fs.existsSync(OUTPUT_FILE)
-    ? JSON.parse(fs.readFileSync(OUTPUT_FILE, "utf-8")) : [];
+    ? JSON.parse(fs.readFileSync(OUTPUT_FILE, "utf-8"))
+    : [];
 
   pages.push({
-    page: pageData.page,
+    page: pageNumber,
     max_id_used: pageData.maxId,
     count: pageData.data.length,
     fetched_at: new Date().toISOString(),
@@ -104,12 +94,35 @@ async function saveToJson(pageData) {
   fs.writeFileSync(OUTPUT_FILE, JSON.stringify(pages, null, 2));
 }
 
+// Resume helpers
+function getResumeMaxId() {
+  if (!fs.existsSync(OUTPUT_FILE)) return null;
+
+  const pages = JSON.parse(fs.readFileSync(OUTPUT_FILE, "utf-8"));
+  const lastPage = pages[pages.length - 1];
+  return lastPage?.data?.[lastPage.data.length - 1]?.id || null;
+}
+
+function getNextPageNumber() {
+  if (!fs.existsSync(OUTPUT_FILE)) return 1;
+
+  const pages = JSON.parse(fs.readFileSync(OUTPUT_FILE, "utf-8"));
+  const lastPage = pages[pages.length - 1];
+  return lastPage ? lastPage.page + 1 : 1;
+}
+
 // Main function
 (async () => {
+  const startMaxId = getResumeMaxId();
+  let pageNumber = getNextPageNumber();
+
   try {
-    for await (const pageData of scrapeStatuses()) {
-      await saveToJson(pageData);
-      console.log(`Saved page ${pageData.page} (${pageData.data.length} statuses)`);
+    for await (const pageData of scrapeStatuses(startMaxId)) {
+      saveToJson(pageData, pageNumber);
+      console.log(
+        `Saved page ${pageNumber} (${pageData.data.length} statuses)`
+      );
+      pageNumber++;
     }
   } catch (err) {
     console.error("Scraping error:", err.message);
