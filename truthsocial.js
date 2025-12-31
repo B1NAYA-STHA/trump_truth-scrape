@@ -9,7 +9,7 @@ const HEADERS = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
 };
 
-const OUTPUT_FILE = "statuses.json";
+const OUTPUT_FILE = "statuseses.json";
 const USE_BROWSER = true; // true = Impit, false = Axios
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
